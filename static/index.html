@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🕳️ rusthole</title>
+<style>
+:root { --bg: #0f172a; --card: #1e293b; --accent: #38bdf8; --red: #f87171; --green: #4ade80; --yellow: #fbbf24; --text: #e2e8f0; --muted: #94a3b8; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+.container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem; padding: 1rem 0; border-bottom: 1px solid #334155; }
+header h1 { font-size: 1.5rem; } header span { color: var(--muted); font-size: 0.9rem; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+.stat-card { background: var(--card); border-radius: 12px; padding: 1.25rem; }
+.stat-card .label { color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.stat-card .value { font-size: 2rem; font-weight: 700; margin-top: 0.25rem; }
+.stat-card .value.blocked { color: var(--red); }
+.stat-card .value.allowed { color: var(--green); }
+.stat-card .value.accent { color: var(--accent); }
+.card { background: var(--card); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; }
+.card h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #334155; font-size: 0.9rem; }
+th { color: var(--muted); font-weight: 500; font-size: 0.8rem; text-transform: uppercase; }
+.badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+.badge.blocked { background: rgba(248,113,113,0.2); color: var(--red); }
+.badge.allowed { background: rgba(74,222,128,0.2); color: var(--green); }
+.badge.cloaked { background: rgba(251,191,36,0.2); color: var(--yellow); }
+.top-list { list-style: none; }
+.top-list li { display: flex; justify-content: space-between; padding: 0.4rem 0; border-bottom: 1px solid #334155; font-size: 0.9rem; }
+.top-list li:last-child { border: none; }
+.top-list .count { color: var(--muted); font-variant-numeric: tabular-nums; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.controls { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.controls input { background: #0f172a; border: 1px solid #334155; color: var(--text); padding: 0.5rem 0.75rem; border-radius: 8px; font-size: 0.9rem; flex: 1; min-width: 150px; }
+.controls button, .btn { background: var(--accent); color: #0f172a; border: none; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.9rem; }
+.controls button:hover, .btn:hover { opacity: 0.9; }
+.btn-sm { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
+.btn-red { background: var(--red); }
+.btn-green { background: var(--green); }
+.btn-yellow { background: var(--yellow); }
+.refresh-info { color: var(--muted); font-size: 0.8rem; margin-left: auto; }
+.tag { display: inline-block; background: #334155; padding: 0.2rem 0.6rem; border-radius: 6px; margin: 0.15rem; font-size: 0.85rem; }
+.tag .remove { cursor: pointer; margin-left: 0.4rem; color: var(--red); }
+.tag-list { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.5rem; }
+.toggle-btn { cursor: pointer; background: none; border: none; font-size: 1.1rem; padding: 0.2rem; }
+@media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>🕳️ rusthole</h1>
+    <span id="blocklist-count">loading...</span>
+    <span class="refresh-info">Auto-refreshes every 5s</span>
+  </header>
+
+  <div class="stats-grid">
+    <div class="stat-card"><div class="label">Total Queries</div><div class="value accent" id="total">-</div></div>
+    <div class="stat-card"><div class="label">Blocked</div><div class="value blocked" id="blocked">-</div></div>
+    <div class="stat-card"><div class="label">Allowed</div><div class="value allowed" id="allowed-count">-</div></div>
+    <div class="stat-card"><div class="label">Block Rate</div><div class="value blocked" id="percent">-</div></div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <h2>Top Blocked Domains</h2>
+      <ul class="top-list" id="top-blocked"></ul>
+    </div>
+    <div class="card">
+      <h2>Top Allowed Domains</h2>
+      <ul class="top-list" id="top-allowed"></ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Top Clients</h2>
+    <ul class="top-list" id="top-clients"></ul>
+  </div>
+
+  <!-- Whitelist -->
+  <div class="card">
+    <h2>⚪ Whitelist <span style="color:var(--muted);font-size:0.8rem">(always allowed, bypasses all blocking)</span></h2>
+    <div class="controls">
+      <input id="whitelist-input" placeholder="domain.com" />
+      <button onclick="addWhitelist()">Add</button>
+    </div>
+    <div class="tag-list" id="whitelist-tags"></div>
+  </div>
+
+  <!-- Regex Filters -->
+  <div class="card">
+    <h2>🔤 Regex Filters <span style="color:var(--muted);font-size:0.8rem">(block domains matching patterns)</span></h2>
+    <div class="controls">
+      <input id="regex-input" placeholder=".*tracking\.example\.com$" />
+      <button onclick="addRegex()">Add</button>
+    </div>
+    <div class="tag-list" id="regex-tags"></div>
+  </div>
+
+  <!-- Custom Rules -->
+  <div class="card">
+    <h2>Custom Rules</h2>
+    <div class="controls">
+      <input id="domain-input" placeholder="domain.com" />
+      <button onclick="addBlock()">Block</button>
+      <button onclick="addAllow()" class="btn-green">Allow</button>
+    </div>
+  </div>
+
+  <!-- Blocklist Sources Management -->
+  <div class="card">
+    <h2>📋 Blocklist Sources</h2>
+    <div class="controls">
+      <input id="src-name" placeholder="Name" />
+      <input id="src-url" placeholder="URL" />
+      <button onclick="addSource()">Add</button>
+      <button onclick="refreshLists()" class="btn-red">Refresh All</button>
+    </div>
+    <table>
+      <thead><tr><th>Name</th><th>URL</th><th>Enabled</th><th>Actions</th></tr></thead>
+      <tbody id="sources-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Query Log Search -->
+  <div class="card">
+    <h2>🔍 Query Log Search</h2>
+    <div class="controls">
+      <input id="search-domain" placeholder="Domain (partial match)" />
+      <input id="search-client" placeholder="Client IP" />
+      <input id="search-type" placeholder="Type (A, AAAA...)" />
+      <select id="search-blocked" style="background:#0f172a;border:1px solid #334155;color:var(--text);padding:0.5rem;border-radius:8px;font-size:0.9rem">
+        <option value="">All</option>
+        <option value="true">Blocked</option>
+        <option value="false">Allowed</option>
+      </select>
+      <button onclick="searchQueries()">Search</button>
+    </div>
+    <table>
+      <thead><tr><th>Time</th><th>Client</th><th>Domain</th><th>Type</th><th>Status</th><th>Latency</th></tr></thead>
+      <tbody id="search-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Query Log -->
+  <div class="card">
+    <h2>Query Log</h2>
+    <div class="controls">
+      <button onclick="loadQueries()">All</button>
+      <button onclick="loadQueries(true)" class="btn-red">Blocked</button>
+      <button onclick="loadQueries(false)" class="btn-green">Allowed</button>
+    </div>
+    <table>
+      <thead><tr><th>Time</th><th>Client</th><th>Domain</th><th>Type</th><th>Status</th><th>Latency</th></tr></thead>
+      <tbody id="query-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const API = '';
+
+async function fetchStats() {
+  try {
+    const [stats, count] = await Promise.all([
+      fetch(API+'/api/stats').then(r=>r.json()),
+      fetch(API+'/api/blocklist/count').then(r=>r.json()),
+    ]);
+    document.getElementById('total').textContent = stats.total_queries.toLocaleString();
+    document.getElementById('blocked').textContent = stats.blocked_queries.toLocaleString();
+    document.getElementById('allowed-count').textContent = stats.allowed_queries.toLocaleString();
+    document.getElementById('percent').textContent = stats.blocked_percentage.toFixed(1) + '%';
+    document.getElementById('blocklist-count').textContent = count.count.toLocaleString() + ' domains blocked';
+    renderList('top-blocked', stats.top_blocked);
+    renderList('top-allowed', stats.top_allowed);
+    renderList('top-clients', stats.top_clients);
+  } catch(e) { console.error(e); }
+}
+
+function renderList(id, items) {
+  const el = document.getElementById(id);
+  el.innerHTML = (items||[]).map(([name,count]) =>
+    `<li><span>${esc(name)}</span><span class="count">${count.toLocaleString()}</span></li>`
+  ).join('') || '<li style="color:var(--muted)">No data yet</li>';
+}
+
+function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+function renderQueryRow(q) {
+  let status = q.blocked ? 'BLOCKED' : 'OK';
+  let cls = q.blocked ? 'blocked' : 'allowed';
+  if (q.cname_cloaked) { status = 'CLOAKED'; cls = 'cloaked'; }
+  return `<tr>
+    <td>${new Date(q.timestamp).toLocaleTimeString()}</td>
+    <td>${esc(q.client_ip)}</td>
+    <td>${esc(q.domain)}</td>
+    <td>${esc(q.query_type)}</td>
+    <td><span class="badge ${cls}">${status}</span></td>
+    <td>${(q.response_time_us/1000).toFixed(1)}ms</td>
+  </tr>`;
+}
+
+async function loadQueries(blocked) {
+  const params = new URLSearchParams({limit:'200'});
+  if (blocked !== undefined) params.set('blocked', blocked);
+  const data = await fetch(API+'/api/queries?'+params).then(r=>r.json());
+  document.getElementById('query-body').innerHTML = data.map(renderQueryRow).join('');
+}
+
+async function searchQueries() {
+  const params = new URLSearchParams({limit:'200'});
+  const q = document.getElementById('search-domain').value.trim();
+  const c = document.getElementById('search-client').value.trim();
+  const t = document.getElementById('search-type').value.trim();
+  const b = document.getElementById('search-blocked').value;
+  if (q) params.set('q', q);
+  if (c) params.set('client', c);
+  if (t) params.set('type', t);
+  if (b) params.set('blocked', b);
+  const data = await fetch(API+'/api/queries/search?'+params).then(r=>r.json());
+  document.getElementById('search-body').innerHTML = data.map(renderQueryRow).join('');
+}
+
+// Custom rules
+async function addBlock() {
+  const d = document.getElementById('domain-input').value.trim();
+  if (!d) return;
+  await fetch(API+'/api/custom/block', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({domain:d})});
+  document.getElementById('domain-input').value = '';
+}
+async function addAllow() {
+  const d = document.getElementById('domain-input').value.trim();
+  if (!d) return;
+  await fetch(API+'/api/custom/allow', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({domain:d})});
+  document.getElementById('domain-input').value = '';
+}
+
+// Whitelist
+async function loadWhitelist() {
+  const data = await fetch(API+'/api/whitelist').then(r=>r.json());
+  document.getElementById('whitelist-tags').innerHTML = data.map(d =>
+    `<span class="tag">${esc(d)}<span class="remove" onclick="removeWhitelist('${esc(d)}')">&times;</span></span>`
+  ).join('') || '<span style="color:var(--muted)">No whitelisted domains</span>';
+}
+async function addWhitelist() {
+  const d = document.getElementById('whitelist-input').value.trim();
+  if (!d) return;
+  await fetch(API+'/api/whitelist', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({domain:d})});
+  document.getElementById('whitelist-input').value = '';
+  loadWhitelist();
+}
+async function removeWhitelist(d) {
+  await fetch(API+'/api/whitelist/remove', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({domain:d})});
+  loadWhitelist();
+}
+
+// Regex filters
+async function loadRegex() {
+  const data = await fetch(API+'/api/regex').then(r=>r.json());
+  document.getElementById('regex-tags').innerHTML = data.map(p =>
+    `<span class="tag"><code>${esc(p)}</code><span class="remove" onclick="removeRegex(\`${p.replace(/`/g,'\\`')}\`)">&times;</span></span>`
+  ).join('') || '<span style="color:var(--muted)">No regex filters</span>';
+}
+async function addRegex() {
+  const p = document.getElementById('regex-input').value.trim();
+  if (!p) return;
+  const r = await fetch(API+'/api/regex', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pattern:p})});
+  if (!r.ok) { alert('Invalid regex: ' + await r.text()); return; }
+  document.getElementById('regex-input').value = '';
+  loadRegex();
+}
+async function removeRegex(p) {
+  await fetch(API+'/api/regex/remove', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pattern:p})});
+  loadRegex();
+}
+
+// Sources
+async function addSource() {
+  const name = document.getElementById('src-name').value.trim();
+  const url = document.getElementById('src-url').value.trim();
+  if (!name || !url) return;
+  await fetch(API+'/api/blocklist/sources', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name,url})});
+  document.getElementById('src-name').value = '';
+  document.getElementById('src-url').value = '';
+  loadSources();
+}
+async function refreshLists() {
+  const r = await fetch(API+'/api/blocklist/refresh', {method:'POST'}).then(r=>r.json());
+  alert('Refreshed: ' + r.count + ' domains loaded');
+  fetchStats();
+}
+async function loadSources() {
+  const data = await fetch(API+'/api/blocklist/sources').then(r=>r.json());
+  document.getElementById('sources-body').innerHTML = data.map(s =>
+    `<tr>
+      <td>${esc(s.name)}</td>
+      <td style="word-break:break-all;font-size:0.8rem">${esc(s.url)}</td>
+      <td><button class="toggle-btn" onclick="toggleSource('${esc(s.name)}',${!s.enabled})">${s.enabled?'✅':'❌'}</button></td>
+      <td><button class="btn btn-sm btn-red" onclick="removeSource('${esc(s.name)}')">Remove</button></td>
+    </tr>`
+  ).join('');
+}
+async function toggleSource(name, enabled) {
+  await fetch(API+'/api/blocklist/sources/toggle', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name,enabled})});
+  loadSources();
+}
+async function removeSource(name) {
+  if (!confirm('Remove blocklist "'+name+'"?')) return;
+  await fetch(API+'/api/blocklist/sources/remove', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name})});
+  loadSources();
+}
+
+// Init
+fetchStats(); loadQueries(); loadSources(); loadWhitelist(); loadRegex();
+setInterval(fetchStats, 5000);
+setInterval(()=>loadQueries(), 10000);
+</script>
+</body>
+</html>
