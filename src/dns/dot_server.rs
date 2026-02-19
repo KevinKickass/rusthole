@@ -8,12 +8,17 @@ use crate::blocklist::BlocklistEngine;
 use crate::db::Database;
 use crate::dns::DohUpstream;
 use crate::dns::tls;
+use crate::dns_rewrite::DnsRewriteEngine;
+use crate::group_policy::GroupPolicyEngine;
+use crate::schedule::ScheduleEngine;
 
-/// DNS-over-TLS server (RFC 7858) on port 853.
 pub struct DotServer {
     blocklist: Arc<BlocklistEngine>,
     upstream: Arc<DohUpstream>,
     db: Arc<Database>,
+    rewrites: Arc<DnsRewriteEngine>,
+    groups: Arc<GroupPolicyEngine>,
+    schedules: Arc<ScheduleEngine>,
 }
 
 impl DotServer {
@@ -21,8 +26,11 @@ impl DotServer {
         blocklist: Arc<BlocklistEngine>,
         upstream: Arc<DohUpstream>,
         db: Arc<Database>,
+        rewrites: Arc<DnsRewriteEngine>,
+        groups: Arc<GroupPolicyEngine>,
+        schedules: Arc<ScheduleEngine>,
     ) -> Self {
-        Self { blocklist, upstream, db }
+        Self { blocklist, upstream, db, rewrites, groups, schedules }
     }
 
     pub async fn run(
@@ -44,11 +52,13 @@ impl DotServer {
             let bl = self.blocklist.clone();
             let up = self.upstream.clone();
             let db = self.db.clone();
+            let rw = self.rewrites.clone();
+            let gp = self.groups.clone();
+            let sc = self.schedules.clone();
 
             tokio::spawn(async move {
                 match acceptor.accept(stream).await {
                     Ok(mut tls_stream) => {
-                        // DoT uses DNS-over-TCP framing (2-byte length prefix) over TLS
                         loop {
                             let mut len_buf = [0u8; 2];
                             if tls_stream.read_exact(&mut len_buf).await.is_err() {
@@ -63,7 +73,7 @@ impl DotServer {
                                 break;
                             }
 
-                            match super::handle_query(&data, peer, &bl, &up, &db).await {
+                            match super::handle_query(&data, peer, &bl, &up, &db, &rw, &gp, &sc).await {
                                 Ok(response) => {
                                     let len = (response.len() as u16).to_be_bytes();
                                     if tls_stream.write_all(&len).await.is_err() {

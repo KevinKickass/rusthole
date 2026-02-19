@@ -12,11 +12,17 @@ use tokio::net::{TcpListener, UdpSocket};
 use crate::blocklist::BlocklistEngine;
 use crate::db::Database;
 use crate::dns::DohUpstream;
+use crate::dns_rewrite::DnsRewriteEngine;
+use crate::group_policy::GroupPolicyEngine;
+use crate::schedule::ScheduleEngine;
 
 pub struct DnsServer {
     blocklist: Arc<BlocklistEngine>,
     upstream: Arc<DohUpstream>,
     db: Arc<Database>,
+    rewrites: Arc<DnsRewriteEngine>,
+    groups: Arc<GroupPolicyEngine>,
+    schedules: Arc<ScheduleEngine>,
 }
 
 impl DnsServer {
@@ -24,8 +30,11 @@ impl DnsServer {
         blocklist: Arc<BlocklistEngine>,
         upstream: Arc<DohUpstream>,
         db: Arc<Database>,
+        rewrites: Arc<DnsRewriteEngine>,
+        groups: Arc<GroupPolicyEngine>,
+        schedules: Arc<ScheduleEngine>,
     ) -> Self {
-        Self { blocklist, upstream, db }
+        Self { blocklist, upstream, db, rewrites, groups, schedules }
     }
 
     pub async fn run(&self, listen_addr: &str) -> Result<()> {
@@ -36,14 +45,19 @@ impl DnsServer {
         let udp_bl = self.blocklist.clone();
         let udp_up = self.upstream.clone();
         let udp_db = self.db.clone();
+        let udp_rw = self.rewrites.clone();
+        let udp_gp = self.groups.clone();
+        let udp_sc = self.schedules.clone();
 
         let tcp_bl = self.blocklist.clone();
         let tcp_up = self.upstream.clone();
         let tcp_db = self.db.clone();
+        let tcp_rw = self.rewrites.clone();
+        let tcp_gp = self.groups.clone();
+        let tcp_sc = self.schedules.clone();
 
         let udp_socket = Arc::new(udp_socket);
 
-        // UDP handler
         let udp_handle = tokio::spawn({
             let socket = udp_socket.clone();
             async move {
@@ -55,9 +69,12 @@ impl DnsServer {
                             let bl = udp_bl.clone();
                             let up = udp_up.clone();
                             let db = udp_db.clone();
+                            let rw = udp_rw.clone();
+                            let gp = udp_gp.clone();
+                            let sc = udp_sc.clone();
                             let sock = socket.clone();
                             tokio::spawn(async move {
-                                match handle_query(&data, src, &bl, &up, &db).await {
+                                match handle_query(&data, src, &bl, &up, &db, &rw, &gp, &sc).await {
                                     Ok(response) => {
                                         let _ = sock.send_to(&response, src).await;
                                     }
@@ -75,7 +92,6 @@ impl DnsServer {
             }
         });
 
-        // TCP handler
         let tcp_handle = tokio::spawn(async move {
             loop {
                 match tcp_listener.accept().await {
@@ -83,8 +99,10 @@ impl DnsServer {
                         let bl = tcp_bl.clone();
                         let up = tcp_up.clone();
                         let db = tcp_db.clone();
+                        let rw = tcp_rw.clone();
+                        let gp = tcp_gp.clone();
+                        let sc = tcp_sc.clone();
                         tokio::spawn(async move {
-                            // DNS over TCP: 2-byte length prefix
                             let mut len_buf = [0u8; 2];
                             if stream.read_exact(&mut len_buf).await.is_err() {
                                 return;
@@ -94,7 +112,7 @@ impl DnsServer {
                             if stream.read_exact(&mut data).await.is_err() {
                                 return;
                             }
-                            match handle_query(&data, src, &bl, &up, &db).await {
+                            match handle_query(&data, src, &bl, &up, &db, &rw, &gp, &sc).await {
                                 Ok(response) => {
                                     let len = (response.len() as u16).to_be_bytes();
                                     let _ = stream.write_all(&len).await;
@@ -128,6 +146,9 @@ pub async fn handle_query(
     blocklist: &BlocklistEngine,
     upstream: &DohUpstream,
     db: &Database,
+    rewrites: &DnsRewriteEngine,
+    groups: &GroupPolicyEngine,
+    schedules: &ScheduleEngine,
 ) -> Result<Vec<u8>> {
     let start = Instant::now();
     let request = Message::from_bytes(data)?;
@@ -141,19 +162,67 @@ pub async fn handle_query(
     let domain_clean = domain.trim_end_matches('.');
     let qtype = question.query_type();
     let qtype_str = format!("{qtype}");
+    let client_ip = client.ip().to_string();
 
-    // Check blocklist
+    // 1. Check DNS rewrites first (local resolution)
+    if let Some(rewrite_bytes) = rewrites.resolve(&request, domain_clean, qtype) {
+        let elapsed = start.elapsed();
+        let db = db.clone();
+        let client_ip2 = client_ip.clone();
+        let domain_log = domain_clean.to_string();
+        let qtype_log = qtype_str.clone();
+        tokio::spawn(async move {
+            let _ = db.log_query(&client_ip2, &domain_log, &qtype_log, false, elapsed.as_micros() as i64, Some("rewrite"), false);
+        });
+        tracing::debug!("REWRITE {domain_clean} ({qtype_str}) for {client}");
+        return Ok(rewrite_bytes);
+    }
+
+    // 2. Check group policy overrides
+    if let Some(group_blocked) = groups.check_domain(&client_ip, domain_clean) {
+        if group_blocked {
+            let response_bytes = build_blocked_response(&request, question.name(), qtype)?;
+            let elapsed = start.elapsed();
+            let db = db.clone();
+            let client_ip2 = client_ip.clone();
+            let domain_log = domain_clean.to_string();
+            let qtype_log = qtype_str.clone();
+            tokio::spawn(async move {
+                let _ = db.log_query(&client_ip2, &domain_log, &qtype_log, true, elapsed.as_micros() as i64, None, false);
+            });
+            tracing::debug!("GROUP BLOCKED {domain_clean} ({qtype_str}) from {client}");
+            return Ok(response_bytes);
+        }
+        // group says allow — skip blocklist check
+    } else {
+        // No group override, proceed with normal blocking checks
+    }
+
+    // 3. Check scheduled blocking
+    if schedules.is_blocked_now(domain_clean) {
+        let response_bytes = build_blocked_response(&request, question.name(), qtype)?;
+        let elapsed = start.elapsed();
+        let db = db.clone();
+        let client_ip2 = client_ip.clone();
+        let domain_log = domain_clean.to_string();
+        let qtype_log = qtype_str.clone();
+        tokio::spawn(async move {
+            let _ = db.log_query(&client_ip2, &domain_log, &qtype_log, true, elapsed.as_micros() as i64, None, false);
+        });
+        tracing::debug!("SCHEDULE BLOCKED {domain_clean} ({qtype_str}) from {client}");
+        return Ok(response_bytes);
+    }
+
+    // 4. Check blocklist
     let blocked = blocklist.is_blocked(domain_clean).await;
     let mut cname_cloaked = false;
 
     let response_bytes = if blocked {
-        // Return 0.0.0.0 for A, :: for AAAA, NXDOMAIN for others
         build_blocked_response(&request, question.name(), qtype)?
     } else {
-        // Forward to upstream
         match upstream.resolve(data).await {
             Ok(bytes) => {
-                // CNAME cloaking detection: inspect response for CNAME records
+                // CNAME cloaking detection
                 if let Ok(response_msg) = Message::from_bytes(&bytes) {
                     for answer in response_msg.answers() {
                         if let RData::CNAME(cname) = answer.data() {
@@ -161,15 +230,14 @@ pub async fn handle_query(
                             let cname_clean = cname_str.trim_end_matches('.');
                             if blocklist.is_cname_cloaked(domain_clean, cname_clean).await {
                                 cname_cloaked = true;
-                                // Block this response — the CNAME points to a tracker
                                 let blocked_resp = build_blocked_response(&request, question.name(), qtype)?;
                                 let elapsed = start.elapsed();
                                 let db2 = db.clone();
-                                let client_ip = client.ip().to_string();
+                                let client_ip2 = client_ip.clone();
                                 let domain_log = domain_clean.to_string();
                                 let qtype_log = qtype_str.clone();
                                 tokio::spawn(async move {
-                                    let _ = db2.log_query(&client_ip, &domain_log, &qtype_log, true, elapsed.as_micros() as i64, None, true);
+                                    let _ = db2.log_query(&client_ip2, &domain_log, &qtype_log, true, elapsed.as_micros() as i64, None, true);
                                 });
                                 tracing::debug!("CNAME CLOAKED {domain_clean} -> {cname_clean} from {client}");
                                 return Ok(blocked_resp);
@@ -189,9 +257,7 @@ pub async fn handle_query(
     let elapsed = start.elapsed();
     let upstream_name: Option<String> = if blocked { None } else { Some(upstream.upstream_name().to_string()) };
 
-    // Log to DB (fire and forget)
     let db = db.clone();
-    let client_ip = client.ip().to_string();
     let domain_log = domain_clean.to_string();
     let qtype_log = qtype_str.clone();
     tokio::spawn(async move {
@@ -224,7 +290,6 @@ pub fn build_blocked_response(request: &Message, name: &Name, qtype: RecordType)
     header.set_recursion_available(true);
     header.set_response_code(ResponseCode::NoError);
     response.set_header(header);
-
     response.add_queries(request.queries().iter().cloned());
 
     match qtype {

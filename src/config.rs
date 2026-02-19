@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,6 +32,14 @@ pub struct Config {
     pub doh_server: Option<DohServerConfig>,
     #[serde(default)]
     pub dot_server: Option<DotServerConfig>,
+    #[serde(default)]
+    pub dns_rewrites: Vec<DnsRewriteEntry>,
+    #[serde(default)]
+    pub group_policies: Vec<GroupPolicy>,
+    #[serde(default)]
+    pub scheduled_rules: Vec<ScheduledRule>,
+    #[serde(default)]
+    pub api: ApiConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,9 +47,7 @@ pub struct DohServerConfig {
     pub enabled: bool,
     #[serde(default = "default_doh_port")]
     pub port: u16,
-    /// Path to TLS certificate PEM file (if not set, generates self-signed)
     pub cert_path: Option<String>,
-    /// Path to TLS private key PEM file
     pub key_path: Option<String>,
 }
 
@@ -49,9 +56,7 @@ pub struct DotServerConfig {
     pub enabled: bool,
     #[serde(default = "default_dot_port")]
     pub port: u16,
-    /// Path to TLS certificate PEM file (if not set, generates self-signed)
     pub cert_path: Option<String>,
-    /// Path to TLS private key PEM file
     pub key_path: Option<String>,
 }
 
@@ -87,6 +92,87 @@ pub struct DhcpConfig {
     pub gateway: String,
     pub dns_server: String,
     pub lease_time_secs: u32,
+    #[serde(default)]
+    pub static_leases: Vec<StaticLease>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StaticLease {
+    pub mac: String,
+    pub ip: String,
+    pub hostname: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DnsRewriteEntry {
+    pub domain: String,
+    #[serde(default = "default_record_type")]
+    pub record_type: String,
+    pub value: String,
+}
+
+fn default_record_type() -> String {
+    "A".into()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupPolicy {
+    pub name: String,
+    #[serde(default)]
+    pub clients: Vec<String>,
+    #[serde(default)]
+    pub blocklists: Vec<String>,
+    #[serde(default)]
+    pub extra_block: Vec<String>,
+    #[serde(default)]
+    pub extra_allow: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScheduledRule {
+    pub name: String,
+    #[serde(default)]
+    pub domains: Vec<String>,
+    #[serde(default)]
+    pub blocklist_names: Vec<String>,
+    pub schedule: ScheduleSpec,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScheduleSpec {
+    #[serde(default)]
+    pub days: Vec<String>,
+    pub start_hour: u8,
+    pub start_minute: u8,
+    pub end_hour: u8,
+    pub end_minute: u8,
+    #[serde(default = "default_timezone")]
+    pub timezone: String,
+}
+
+fn default_timezone() -> String {
+    "UTC".into()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiConfig {
+    #[serde(default)]
+    pub token: Option<String>,
+    #[serde(default = "default_api_enabled")]
+    pub enabled: bool,
+}
+
+fn default_api_enabled() -> bool {
+    true
+}
+
+impl Default for ApiConfig {
+    fn default() -> Self {
+        Self {
+            token: None,
+            enabled: true,
+        }
+    }
 }
 
 fn default_listen() -> String { "0.0.0.0:53".into() }
@@ -132,6 +218,10 @@ impl Default for Config {
             dhcp: None,
             doh_server: None,
             dot_server: None,
+            dns_rewrites: vec![],
+            group_policies: vec![],
+            scheduled_rules: vec![],
+            api: ApiConfig::default(),
         }
     }
 }

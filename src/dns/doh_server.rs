@@ -16,19 +16,27 @@ use crate::blocklist::BlocklistEngine;
 use crate::db::Database;
 use crate::dns::DohUpstream;
 use crate::dns::tls;
+use crate::dns_rewrite::DnsRewriteEngine;
+use crate::group_policy::GroupPolicyEngine;
+use crate::schedule::ScheduleEngine;
 
 #[derive(Clone)]
 struct DohState {
     blocklist: Arc<BlocklistEngine>,
     upstream: Arc<DohUpstream>,
     db: Arc<Database>,
+    rewrites: Arc<DnsRewriteEngine>,
+    groups: Arc<GroupPolicyEngine>,
+    schedules: Arc<ScheduleEngine>,
 }
 
-/// DNS-over-HTTPS server serving the /dns-query endpoint.
 pub struct DohServer {
     blocklist: Arc<BlocklistEngine>,
     upstream: Arc<DohUpstream>,
     db: Arc<Database>,
+    rewrites: Arc<DnsRewriteEngine>,
+    groups: Arc<GroupPolicyEngine>,
+    schedules: Arc<ScheduleEngine>,
 }
 
 impl DohServer {
@@ -36,8 +44,11 @@ impl DohServer {
         blocklist: Arc<BlocklistEngine>,
         upstream: Arc<DohUpstream>,
         db: Arc<Database>,
+        rewrites: Arc<DnsRewriteEngine>,
+        groups: Arc<GroupPolicyEngine>,
+        schedules: Arc<ScheduleEngine>,
     ) -> Self {
-        Self { blocklist, upstream, db }
+        Self { blocklist, upstream, db, rewrites, groups, schedules }
     }
 
     pub async fn run(
@@ -52,6 +63,9 @@ impl DohServer {
             blocklist: self.blocklist.clone(),
             upstream: self.upstream.clone(),
             db: self.db.clone(),
+            rewrites: self.rewrites.clone(),
+            groups: self.groups.clone(),
+            schedules: self.schedules.clone(),
         };
 
         let app = Router::new()
@@ -96,7 +110,6 @@ struct DohGetParams {
     dns: String,
 }
 
-/// RFC 8484: GET with ?dns= base64url-encoded query
 async fn doh_get(
     State(state): State<DohState>,
     headers: HeaderMap,
@@ -106,7 +119,6 @@ async fn doh_get(
     process_doh(state, &query_bytes, &headers).await
 }
 
-/// RFC 8484: POST with application/dns-message body
 async fn doh_post(
     State(state): State<DohState>,
     headers: HeaderMap,
@@ -120,7 +132,6 @@ async fn process_doh(
     query_bytes: &[u8],
     _headers: &HeaderMap,
 ) -> Result<(StatusCode, HeaderMap, Vec<u8>), StatusCode> {
-    // Use a synthetic client address for DoH queries
     let client_addr: SocketAddr = "0.0.0.0:0".parse().unwrap();
 
     let response = super::handle_query(
@@ -129,6 +140,9 @@ async fn process_doh(
         &state.blocklist,
         &state.upstream,
         &state.db,
+        &state.rewrites,
+        &state.groups,
+        &state.schedules,
     ).await.map_err(|_| StatusCode::BAD_REQUEST)?;
 
     let mut resp_headers = HeaderMap::new();
