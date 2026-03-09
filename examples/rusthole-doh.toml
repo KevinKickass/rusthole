@@ -1,0 +1,86 @@
+# rusthole — DNS-over-HTTPS upstream configuration
+# Uses encrypted DoH upstreams for maximum privacy.
+# No DNS queries leave your network in plaintext.
+
+listen_addr = "0.0.0.0:53"
+web_port = 8080
+
+# --- Upstreams (DNS-over-HTTPS) ---
+
+[[upstream]]
+url = "https://cloudflare-dns.com/dns-query"
+kind = "doh"
+
+[[upstream]]
+url = "https://dns.google/dns-query"
+kind = "doh"
+
+# --- Blocklists ---
+
+[[blocklists]]
+name = "Steven Black Unified"
+url = "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+enabled = true
+
+[[blocklists]]
+name = "Steven Black Fakenews + Gambling"
+url = "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-gambling/hosts"
+enabled = true
+
+[[blocklists]]
+name = "AdGuard DNS Filter"
+url = "https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt"
+enabled = true
+
+[[blocklists]]
+name = "OISD Big"
+url = "https://big.oisd.nl/domainswild"
+enabled = true
+
+[[blocklists]]
+name = "Hagezi Pro"
+url = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/hosts/pro.txt"
+enabled = true
+
+[[blocklists]]
+name = "1Hosts Lite"
+url = "https://o0.pages.dev/Lite/hosts.txt"
+enabled = true
+
+[[blocklists]]
+name = "Peter Lowe's Ad and tracking server list"
+url = "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext"
+enabled = true
+
+# --- Wildcard blocks ---
+# Block entire ad/tracking domains including all subdomains
+
+wildcard_block = [
+    "*.doubleclick.net",
+    "*.googlesyndication.com",
+    "*.googleadservices.com",
+    "*.facebook-tracking.com",
+    "*.analytics.tiktok.com",
+]
+
+# --- Whitelist ---
+# Domains that should never be blocked (even if on a blocklist)
+
+whitelist = [
+    "s.youtube.com",           # YouTube history
+    "video-stats.l.google.com", # YouTube stats
+    "clients4.google.com",     # Google Chrome updates
+    "clients2.google.com",     # Google Chrome updates
+    "s.shopify.com",           # Shopify checkout
+    "cdn.shopify.com",         # Shopify assets
+]
+
+# --- Settings ---
+
+db_path = "rusthole.db"
+blocklist_update_interval_secs = 86400  # 24 hours
+
+# --- API ---
+
+[api]
+# token = "your-secret-token"  # Uncomment to require auth for API

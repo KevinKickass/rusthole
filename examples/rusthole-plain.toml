@@ -1,0 +1,90 @@
+# rusthole — Plain DNS upstream configuration
+# Uses standard UDP DNS upstreams. Simple, fast, compatible with everything.
+# Note: DNS queries to upstream are unencrypted.
+
+listen_addr = "0.0.0.0:53"
+web_port = 8080
+
+# --- Upstreams (Plain UDP DNS) ---
+
+[[upstream]]
+url = "1.1.1.1:53"
+kind = "udp"
+
+[[upstream]]
+url = "1.0.0.1:53"
+kind = "udp"
+
+[[upstream]]
+url = "9.9.9.9:53"
+kind = "udp"
+
+[[upstream]]
+url = "8.8.8.8:53"
+kind = "udp"
+
+# --- Blocklists ---
+
+[[blocklists]]
+name = "Steven Black Unified"
+url = "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+enabled = true
+
+[[blocklists]]
+name = "AdGuard DNS Filter"
+url = "https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt"
+enabled = true
+
+[[blocklists]]
+name = "Hagezi Multi Pro"
+url = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/hosts/pro.txt"
+enabled = true
+
+[[blocklists]]
+name = "OISD Big"
+url = "https://big.oisd.nl/domainswild"
+enabled = true
+
+[[blocklists]]
+name = "Peter Lowe's Ad and tracking server list"
+url = "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext"
+enabled = true
+
+[[blocklists]]
+name = "Dan Pollock's hosts"
+url = "https://someonewhocares.org/hosts/zero/hosts"
+enabled = true
+
+[[blocklists]]
+name = "URLhaus Malware Hosts"
+url = "https://urlhaus.abuse.ch/downloads/hostfile/"
+enabled = true
+
+# --- Wildcard blocks ---
+
+wildcard_block = [
+    "*.doubleclick.net",
+    "*.googlesyndication.com",
+    "*.googleadservices.com",
+    "*.adnxs.com",
+    "*.ads.linkedin.com",
+]
+
+# --- Whitelist ---
+
+whitelist = [
+    "s.youtube.com",
+    "video-stats.l.google.com",
+    "clients4.google.com",
+    "clients2.google.com",
+]
+
+# --- Settings ---
+
+db_path = "rusthole.db"
+blocklist_update_interval_secs = 86400  # 24 hours
+
+# --- API ---
+
+[api]
+# token = "your-secret-token"  # Uncomment to require auth for API

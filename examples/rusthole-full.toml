@@ -1,0 +1,188 @@
+# rusthole — Full configuration example
+# Everything enabled: DoH upstream, DoH/DoT server, DHCP, rewrites,
+# group policies, scheduled blocking, API auth.
+
+listen_addr = "0.0.0.0:53"
+web_port = 8080
+
+# --- Upstreams (DNS-over-HTTPS) ---
+
+[[upstream]]
+url = "https://cloudflare-dns.com/dns-query"
+kind = "doh"
+
+[[upstream]]
+url = "https://dns.google/dns-query"
+kind = "doh"
+
+# --- DoH Server (serve DoH to your clients) ---
+
+[doh_server]
+enabled = true
+port = 443
+cert_path = "/etc/rusthole/cert.pem"
+key_path = "/etc/rusthole/key.pem"
+
+# --- DoT Server (serve DNS-over-TLS to your clients) ---
+
+[dot_server]
+enabled = true
+port = 853
+cert_path = "/etc/rusthole/cert.pem"
+key_path = "/etc/rusthole/key.pem"
+
+# --- DHCP Server ---
+
+[dhcp]
+enabled = true
+interface = "eth0"
+range_start = "192.168.1.100"
+range_end = "192.168.1.200"
+subnet_mask = "255.255.255.0"
+gateway = "192.168.1.1"
+dns_server = "192.168.1.1"
+lease_duration_secs = 86400
+
+# Static DHCP leases
+[[dhcp.static_leases]]
+mac = "AA:BB:CC:DD:EE:01"
+ip = "192.168.1.10"
+hostname = "server"
+
+[[dhcp.static_leases]]
+mac = "AA:BB:CC:DD:EE:02"
+ip = "192.168.1.11"
+hostname = "nas"
+
+# --- Blocklists ---
+
+[[blocklists]]
+name = "Steven Black Unified"
+url = "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+enabled = true
+
+[[blocklists]]
+name = "Steven Black Fakenews + Gambling + Porn + Social"
+url = "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-gambling-porn-social/hosts"
+enabled = false  # enable if you want aggressive blocking
+
+[[blocklists]]
+name = "AdGuard DNS Filter"
+url = "https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt"
+enabled = true
+
+[[blocklists]]
+name = "Hagezi Ultimate"
+url = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/hosts/ultimate.txt"
+enabled = true
+
+[[blocklists]]
+name = "OISD Big"
+url = "https://big.oisd.nl/domainswild"
+enabled = true
+
+[[blocklists]]
+name = "1Hosts Pro"
+url = "https://o0.pages.dev/Pro/hosts.txt"
+enabled = true
+
+[[blocklists]]
+name = "Peter Lowe's Ad and tracking server list"
+url = "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext"
+enabled = true
+
+[[blocklists]]
+name = "URLhaus Malware Hosts"
+url = "https://urlhaus.abuse.ch/downloads/hostfile/"
+enabled = true
+
+[[blocklists]]
+name = "Phishing Army Extended"
+url = "https://phishing.army/download/phishing_army_blocklist_extended.txt"
+enabled = true
+
+[[blocklists]]
+name = "NoTracking"
+url = "https://raw.githubusercontent.com/notracking/hosts-blocklists/master/hostnames.txt"
+enabled = true
+
+# --- Wildcard blocks ---
+
+wildcard_block = [
+    "*.doubleclick.net",
+    "*.googlesyndication.com",
+    "*.googleadservices.com",
+    "*.adnxs.com",
+    "*.ads.linkedin.com",
+    "*.facebook-tracking.com",
+    "*.analytics.tiktok.com",
+    "*.telemetry.microsoft.com",
+]
+
+# --- Regex filters ---
+
+regex_filters = [
+    "^ad[0-9]+\\.",          # ad1.example.com, ad42.example.com
+    "^tracking\\.",           # tracking.anything.com
+    "^telemetry\\.",          # telemetry.anything.com
+    ".*\\.ads\\..*",          # anything.ads.anything
+]
+
+# --- Whitelist ---
+
+whitelist = [
+    "s.youtube.com",
+    "video-stats.l.google.com",
+    "clients4.google.com",
+    "clients2.google.com",
+    "s.shopify.com",
+    "cdn.shopify.com",
+    "api.github.com",
+    "github.com",
+    "raw.githubusercontent.com",
+]
+
+# --- DNS Rewrites ---
+# Redirect specific domains to custom IPs (local services, split DNS)
+
+[[dns_rewrites]]
+domain = "nas.home"
+answer = "192.168.1.11"
+type = "A"
+
+[[dns_rewrites]]
+domain = "printer.home"
+answer = "192.168.1.50"
+type = "A"
+
+# --- Group Policies ---
+# Per-client or per-subnet blocking rules
+
+[[group_policies]]
+name = "kids"
+clients = ["192.168.1.150", "192.168.1.151"]
+extra_blocklists = ["Steven Black Fakenews + Gambling + Porn + Social"]
+
+[[group_policies]]
+name = "iot"
+clients = ["192.168.1.200/28"]
+blocked_domains = ["*.telemetry.*", "*.analytics.*", "*.tracking.*"]
+
+# --- Scheduled Rules ---
+# Time-based blocking (e.g., block social media during work hours)
+
+[[scheduled_rules]]
+name = "No social media during work"
+domains = ["*.facebook.com", "*.instagram.com", "*.tiktok.com", "*.twitter.com", "*.reddit.com"]
+schedule = "Mon-Fri 09:00-17:00"
+action = "block"
+
+# --- Settings ---
+
+db_path = "rusthole.db"
+blocklist_update_interval_secs = 86400  # 24 hours
+
+# --- API ---
+
+[api]
+token = "change-me-to-a-secure-token"
