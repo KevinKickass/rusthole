@@ -118,10 +118,11 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release
-          for dir in artifacts/rusthole-*/; do
-            target=$(basename "$dir" | sed 's/rusthole-//')
-            cp "$dir/rusthole" "release/rusthole-${target}" 2>/dev/null || true
-          done
+          cp artifacts/rusthole-x86_64-unknown-linux-gnu/rusthole    release/rusthole-linux-amd64 2>/dev/null || true
+          cp artifacts/rusthole-x86_64-unknown-linux-musl/rusthole   release/rusthole-linux-amd64-static 2>/dev/null || true
+          cp artifacts/rusthole-aarch64-unknown-linux-gnu/rusthole   release/rusthole-linux-arm64 2>/dev/null || true
+          cp artifacts/rusthole-x86_64-apple-darwin/rusthole         release/rusthole-macos-amd64 2>/dev/null || true
+          cp artifacts/rusthole-aarch64-apple-darwin/rusthole        release/rusthole-macos-arm64 2>/dev/null || true
           ls -la release/
 
       - name: Create Release
