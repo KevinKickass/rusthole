@@ -1,7 +1,7 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use parking_lot::Mutex;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::Serialize;
 use std::path::Path;
 use std::sync::Arc;
@@ -49,7 +49,8 @@ pub struct ClientStats {
 impl Database {
     pub fn open(path: &Path) -> Result<Self> {
         let conn = Connection::open(path)?;
-        conn.execute_batch("
+        conn.execute_batch(
+            "
             PRAGMA journal_mode=WAL;
             PRAGMA synchronous=NORMAL;
             PRAGMA cache_size=-8000;
@@ -71,20 +72,30 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_query_log_domain ON query_log(domain);
             CREATE INDEX IF NOT EXISTS idx_query_log_client ON query_log(client_ip);
             CREATE INDEX IF NOT EXISTS idx_query_log_blocked ON query_log(blocked);
-        ")?;
+        ",
+        )?;
 
         // Add cname_cloaked column if missing (migration)
         let has_cname: bool = conn
-            .prepare("SELECT COUNT(*) FROM pragma_table_info('query_log') WHERE name='cname_cloaked'")?
+            .prepare(
+                "SELECT COUNT(*) FROM pragma_table_info('query_log') WHERE name='cname_cloaked'",
+            )?
             .query_row([], |r| r.get::<_, i64>(0))
-            .unwrap_or(0) > 0;
+            .unwrap_or(0)
+            > 0;
         if !has_cname {
-            let _ = conn.execute("ALTER TABLE query_log ADD COLUMN cname_cloaked INTEGER NOT NULL DEFAULT 0", []);
+            let _ = conn.execute(
+                "ALTER TABLE query_log ADD COLUMN cname_cloaked INTEGER NOT NULL DEFAULT 0",
+                [],
+            );
         }
 
-        Ok(Self { conn: Arc::new(Mutex::new(conn)) })
+        Ok(Self {
+            conn: Arc::new(Mutex::new(conn)),
+        })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn log_query(
         &self,
         client_ip: &str,
@@ -105,27 +116,40 @@ impl Database {
         Ok(())
     }
 
-    pub fn get_queries(&self, limit: u32, offset: u32, filter_blocked: Option<bool>) -> Result<Vec<QueryLogEntry>> {
+    pub fn get_queries(
+        &self,
+        limit: u32,
+        offset: u32,
+        filter_blocked: Option<bool>,
+    ) -> Result<Vec<QueryLogEntry>> {
         let conn = self.conn.lock();
         let sql = match filter_blocked {
-            Some(true) => "SELECT id,timestamp,client_ip,domain,query_type,blocked,response_time_us,upstream,cname_cloaked FROM query_log WHERE blocked=1 ORDER BY id DESC LIMIT ?1 OFFSET ?2",
-            Some(false) => "SELECT id,timestamp,client_ip,domain,query_type,blocked,response_time_us,upstream,cname_cloaked FROM query_log WHERE blocked=0 ORDER BY id DESC LIMIT ?1 OFFSET ?2",
-            None => "SELECT id,timestamp,client_ip,domain,query_type,blocked,response_time_us,upstream,cname_cloaked FROM query_log ORDER BY id DESC LIMIT ?1 OFFSET ?2",
+            Some(true) => {
+                "SELECT id,timestamp,client_ip,domain,query_type,blocked,response_time_us,upstream,cname_cloaked FROM query_log WHERE blocked=1 ORDER BY id DESC LIMIT ?1 OFFSET ?2"
+            }
+            Some(false) => {
+                "SELECT id,timestamp,client_ip,domain,query_type,blocked,response_time_us,upstream,cname_cloaked FROM query_log WHERE blocked=0 ORDER BY id DESC LIMIT ?1 OFFSET ?2"
+            }
+            None => {
+                "SELECT id,timestamp,client_ip,domain,query_type,blocked,response_time_us,upstream,cname_cloaked FROM query_log ORDER BY id DESC LIMIT ?1 OFFSET ?2"
+            }
         };
         let mut stmt = conn.prepare(sql)?;
-        let rows = stmt.query_map(params![limit, offset], |row| {
-            Ok(QueryLogEntry {
-                id: row.get(0)?,
-                timestamp: row.get(1)?,
-                client_ip: row.get(2)?,
-                domain: row.get(3)?,
-                query_type: row.get(4)?,
-                blocked: row.get::<_, i32>(5)? != 0,
-                response_time_us: row.get(6)?,
-                upstream: row.get(7)?,
-                cname_cloaked: row.get::<_, i32>(8).unwrap_or(0) != 0,
-            })
-        })?.collect::<std::result::Result<Vec<_>, _>>()?;
+        let rows = stmt
+            .query_map(params![limit, offset], |row| {
+                Ok(QueryLogEntry {
+                    id: row.get(0)?,
+                    timestamp: row.get(1)?,
+                    client_ip: row.get(2)?,
+                    domain: row.get(3)?,
+                    query_type: row.get(4)?,
+                    blocked: row.get::<_, i32>(5)? != 0,
+                    response_time_us: row.get(6)?,
+                    upstream: row.get(7)?,
+                    cname_cloaked: row.get::<_, i32>(8).unwrap_or(0) != 0,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(rows)
     }
 
@@ -141,7 +165,7 @@ impl Database {
     ) -> Result<Vec<QueryLogEntry>> {
         let conn = self.conn.lock();
         let mut sql = String::from(
-            "SELECT id,timestamp,client_ip,domain,query_type,blocked,response_time_us,upstream,cname_cloaked FROM query_log WHERE 1=1"
+            "SELECT id,timestamp,client_ip,domain,query_type,blocked,response_time_us,upstream,cname_cloaked FROM query_log WHERE 1=1",
         );
         let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
 
@@ -166,45 +190,61 @@ impl Database {
         param_values.push(Box::new(limit));
         param_values.push(Box::new(offset));
 
-        let params_ref: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> =
+            param_values.iter().map(|p| p.as_ref()).collect();
         let mut stmt = conn.prepare(&sql)?;
-        let rows = stmt.query_map(params_ref.as_slice(), |row| {
-            Ok(QueryLogEntry {
-                id: row.get(0)?,
-                timestamp: row.get(1)?,
-                client_ip: row.get(2)?,
-                domain: row.get(3)?,
-                query_type: row.get(4)?,
-                blocked: row.get::<_, i32>(5)? != 0,
-                response_time_us: row.get(6)?,
-                upstream: row.get(7)?,
-                cname_cloaked: row.get::<_, i32>(8).unwrap_or(0) != 0,
-            })
-        })?.collect::<std::result::Result<Vec<_>, _>>()?;
+        let rows = stmt
+            .query_map(params_ref.as_slice(), |row| {
+                Ok(QueryLogEntry {
+                    id: row.get(0)?,
+                    timestamp: row.get(1)?,
+                    client_ip: row.get(2)?,
+                    domain: row.get(3)?,
+                    query_type: row.get(4)?,
+                    blocked: row.get::<_, i32>(5)? != 0,
+                    response_time_us: row.get(6)?,
+                    upstream: row.get(7)?,
+                    cname_cloaked: row.get::<_, i32>(8).unwrap_or(0) != 0,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(rows)
     }
 
     pub fn get_stats(&self) -> Result<Stats> {
         let conn = self.conn.lock();
         let total: u64 = conn.query_row("SELECT COUNT(*) FROM query_log", [], |r| r.get(0))?;
-        let blocked: u64 = conn.query_row("SELECT COUNT(*) FROM query_log WHERE blocked=1", [], |r| r.get(0))?;
+        let blocked: u64 =
+            conn.query_row("SELECT COUNT(*) FROM query_log WHERE blocked=1", [], |r| {
+                r.get(0)
+            })?;
 
         let mut stats = Stats {
             total_queries: total,
             blocked_queries: blocked,
             allowed_queries: total - blocked,
-            blocked_percentage: if total > 0 { (blocked as f64 / total as f64) * 100.0 } else { 0.0 },
+            blocked_percentage: if total > 0 {
+                (blocked as f64 / total as f64) * 100.0
+            } else {
+                0.0
+            },
             ..Default::default()
         };
 
         let mut stmt = conn.prepare("SELECT domain, COUNT(*) as c FROM query_log WHERE blocked=1 GROUP BY domain ORDER BY c DESC LIMIT 10")?;
-        stats.top_blocked = stmt.query_map([], |r| Ok((r.get::<_,String>(0)?, r.get::<_,u64>(1)?)))?.collect::<std::result::Result<Vec<_>,_>>()?;
+        stats.top_blocked = stmt
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, u64>(1)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         let mut stmt = conn.prepare("SELECT domain, COUNT(*) as c FROM query_log WHERE blocked=0 GROUP BY domain ORDER BY c DESC LIMIT 10")?;
-        stats.top_allowed = stmt.query_map([], |r| Ok((r.get::<_,String>(0)?, r.get::<_,u64>(1)?)))?.collect::<std::result::Result<Vec<_>,_>>()?;
+        stats.top_allowed = stmt
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, u64>(1)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         let mut stmt = conn.prepare("SELECT client_ip, COUNT(*) as c FROM query_log GROUP BY client_ip ORDER BY c DESC LIMIT 10")?;
-        stats.top_clients = stmt.query_map([], |r| Ok((r.get::<_,String>(0)?, r.get::<_,u64>(1)?)))?.collect::<std::result::Result<Vec<_>,_>>()?;
+        stats.top_clients = stmt
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, u64>(1)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(stats)
     }
@@ -213,23 +253,33 @@ impl Database {
     pub fn get_client_stats(&self, client_ip: &str) -> Result<ClientStats> {
         let conn = self.conn.lock();
         let total: u64 = conn.query_row(
-            "SELECT COUNT(*) FROM query_log WHERE client_ip=?1", params![client_ip], |r| r.get(0)
+            "SELECT COUNT(*) FROM query_log WHERE client_ip=?1",
+            params![client_ip],
+            |r| r.get(0),
         )?;
         let blocked: u64 = conn.query_row(
-            "SELECT COUNT(*) FROM query_log WHERE client_ip=?1 AND blocked=1", params![client_ip], |r| r.get(0)
+            "SELECT COUNT(*) FROM query_log WHERE client_ip=?1 AND blocked=1",
+            params![client_ip],
+            |r| r.get(0),
         )?;
 
         let mut stmt = conn.prepare(
             "SELECT domain, COUNT(*) as c FROM query_log WHERE client_ip=?1 GROUP BY domain ORDER BY c DESC LIMIT 20"
         )?;
-        let top_domains = stmt.query_map(params![client_ip], |r| Ok((r.get::<_,String>(0)?, r.get::<_,u64>(1)?)))?
-            .collect::<std::result::Result<Vec<_>,_>>()?;
+        let top_domains = stmt
+            .query_map(params![client_ip], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, u64>(1)?))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         let mut stmt = conn.prepare(
             "SELECT domain, COUNT(*) as c FROM query_log WHERE client_ip=?1 AND blocked=1 GROUP BY domain ORDER BY c DESC LIMIT 20"
         )?;
-        let top_blocked_domains = stmt.query_map(params![client_ip], |r| Ok((r.get::<_,String>(0)?, r.get::<_,u64>(1)?)))?
-            .collect::<std::result::Result<Vec<_>,_>>()?;
+        let top_blocked_domains = stmt
+            .query_map(params![client_ip], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, u64>(1)?))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(ClientStats {
             client_ip: client_ip.to_string(),
@@ -247,9 +297,15 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT client_ip, COUNT(*) as total, SUM(CASE WHEN blocked=1 THEN 1 ELSE 0 END) as blocked_count FROM query_log GROUP BY client_ip ORDER BY total DESC"
         )?;
-        let rows = stmt.query_map([], |r| {
-            Ok((r.get::<_,String>(0)?, r.get::<_,u64>(1)?, r.get::<_,u64>(2)?))
-        })?.collect::<std::result::Result<Vec<_>,_>>()?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, u64>(1)?,
+                    r.get::<_, u64>(2)?,
+                ))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(rows)
     }
 }

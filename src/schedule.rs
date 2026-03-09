@@ -49,7 +49,7 @@ impl ScheduleEngine {
         let rules = self.rules.read();
 
         for rule in rules.iter() {
-            if !self.is_active_now(&rule, &now) {
+            if !self.is_active_now(rule, &now) {
                 continue;
             }
             // Check domain match
@@ -76,8 +76,9 @@ impl ScheduleEngine {
             };
             let matches = rule.days.iter().any(|d| {
                 let d = d.to_lowercase();
-                d == today || d == "weekday" && matches!(today, "mon"|"tue"|"wed"|"thu"|"fri")
-                    || d == "weekend" && matches!(today, "sat"|"sun")
+                d == today
+                    || d == "weekday" && matches!(today, "mon" | "tue" | "wed" | "thu" | "fri")
+                    || d == "weekend" && matches!(today, "sat" | "sun")
             });
             if !matches {
                 return false;

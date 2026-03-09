@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -175,18 +174,38 @@ impl Default for ApiConfig {
     }
 }
 
-fn default_listen() -> String { "0.0.0.0:53".into() }
-fn default_web_port() -> u16 { 8080 }
-fn default_upstream_type() -> UpstreamKind { UpstreamKind::Doh }
-fn default_db_path() -> PathBuf { PathBuf::from("rusthole.db") }
-fn default_update_interval() -> u64 { 86400 }
-fn default_doh_port() -> u16 { 443 }
-fn default_dot_port() -> u16 { 853 }
+fn default_listen() -> String {
+    "0.0.0.0:53".into()
+}
+fn default_web_port() -> u16 {
+    8080
+}
+fn default_upstream_type() -> UpstreamKind {
+    UpstreamKind::Doh
+}
+fn default_db_path() -> PathBuf {
+    PathBuf::from("rusthole.db")
+}
+fn default_update_interval() -> u64 {
+    86400
+}
+fn default_doh_port() -> u16 {
+    443
+}
+fn default_dot_port() -> u16 {
+    853
+}
 
 fn default_upstream() -> Vec<UpstreamConfig> {
     vec![
-        UpstreamConfig { url: "https://cloudflare-dns.com/dns-query".into(), kind: UpstreamKind::Doh },
-        UpstreamConfig { url: "https://dns.google/dns-query".into(), kind: UpstreamKind::Doh },
+        UpstreamConfig {
+            url: "https://cloudflare-dns.com/dns-query".into(),
+            kind: UpstreamKind::Doh,
+        },
+        UpstreamConfig {
+            url: "https://dns.google/dns-query".into(),
+            kind: UpstreamKind::Doh,
+        },
     ]
 }
 
@@ -204,7 +223,8 @@ impl Default for Config {
                 },
                 BlocklistSource {
                     name: "AdGuard DNS".into(),
-                    url: "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt".into(),
+                    url: "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt"
+                        .into(),
                     enabled: true,
                 },
             ],

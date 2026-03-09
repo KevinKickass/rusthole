@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::sync::Arc;
 
@@ -86,14 +85,14 @@ impl DnsRewriteEngine {
     }
 
     fn type_matches(&self, rule_type: &str, qtype: RecordType) -> bool {
-        match (rule_type, qtype) {
-            ("A", RecordType::A) => true,
-            ("AAAA", RecordType::AAAA) => true,
-            ("CNAME", RecordType::CNAME) => true,
-            ("CNAME", RecordType::A) => true,
-            ("CNAME", RecordType::AAAA) => true,
-            _ => false,
-        }
+        matches!(
+            (rule_type, qtype),
+            ("A", RecordType::A)
+                | ("AAAA", RecordType::AAAA)
+                | ("CNAME", RecordType::CNAME)
+                | ("CNAME", RecordType::A)
+                | ("CNAME", RecordType::AAAA)
+        )
     }
 
     fn make_rdata(&self, rule: &RewriteRule, _name: &Name) -> Option<RData> {

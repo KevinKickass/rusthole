@@ -28,7 +28,8 @@ async fn serve_static(axum::extract::Path(path): axum::extract::Path<String>) ->
                 StatusCode::OK,
                 [(header::CONTENT_TYPE, mime.to_string())],
                 file.data.to_vec(),
-            ).into_response()
+            )
+                .into_response()
         }
         None => StatusCode::NOT_FOUND.into_response(),
     }

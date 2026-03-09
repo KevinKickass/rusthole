@@ -36,7 +36,9 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    let config_path = std::env::args().nth(1).unwrap_or_else(|| "rusthole.toml".into());
+    let config_path = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "rusthole.toml".into());
     let config = Config::load(&config_path)?;
 
     tracing::info!("🕳️  rusthole v0.3.0 starting up");
@@ -86,8 +88,12 @@ async fn main() -> Result<()> {
 
     // Start DNS server
     let dns_server = DnsServer::new(
-        blocklist.clone(), upstream.clone(), db.clone(),
-        rewrites.clone(), groups.clone(), schedules.clone(),
+        blocklist.clone(),
+        upstream.clone(),
+        db.clone(),
+        rewrites.clone(),
+        groups.clone(),
+        schedules.clone(),
     );
     let listen_addr = config.listen_addr.clone();
     let dns_handle = tokio::spawn(async move {
@@ -97,39 +103,47 @@ async fn main() -> Result<()> {
     });
 
     // Start DoH server if configured
-    if let Some(ref doh_config) = config.doh_server {
-        if doh_config.enabled {
-            let doh = DohServer::new(
-                blocklist.clone(), upstream.clone(), db.clone(),
-                rewrites.clone(), groups.clone(), schedules.clone(),
-            );
-            let port = doh_config.port;
-            let cert = doh_config.cert_path.clone();
-            let key = doh_config.key_path.clone();
-            tokio::spawn(async move {
-                if let Err(e) = doh.run(port, cert.as_deref(), key.as_deref()).await {
-                    tracing::error!("DoH server error: {e}");
-                }
-            });
-        }
+    if let Some(ref doh_config) = config.doh_server
+        && doh_config.enabled
+    {
+        let doh = DohServer::new(
+            blocklist.clone(),
+            upstream.clone(),
+            db.clone(),
+            rewrites.clone(),
+            groups.clone(),
+            schedules.clone(),
+        );
+        let port = doh_config.port;
+        let cert = doh_config.cert_path.clone();
+        let key = doh_config.key_path.clone();
+        tokio::spawn(async move {
+            if let Err(e) = doh.run(port, cert.as_deref(), key.as_deref()).await {
+                tracing::error!("DoH server error: {e}");
+            }
+        });
     }
 
     // Start DoT server if configured
-    if let Some(ref dot_config) = config.dot_server {
-        if dot_config.enabled {
-            let dot = DotServer::new(
-                blocklist.clone(), upstream.clone(), db.clone(),
-                rewrites.clone(), groups.clone(), schedules.clone(),
-            );
-            let port = dot_config.port;
-            let cert = dot_config.cert_path.clone();
-            let key = dot_config.key_path.clone();
-            tokio::spawn(async move {
-                if let Err(e) = dot.run(port, cert.as_deref(), key.as_deref()).await {
-                    tracing::error!("DoT server error: {e}");
-                }
-            });
-        }
+    if let Some(ref dot_config) = config.dot_server
+        && dot_config.enabled
+    {
+        let dot = DotServer::new(
+            blocklist.clone(),
+            upstream.clone(),
+            db.clone(),
+            rewrites.clone(),
+            groups.clone(),
+            schedules.clone(),
+        );
+        let port = dot_config.port;
+        let cert = dot_config.cert_path.clone();
+        let key = dot_config.key_path.clone();
+        tokio::spawn(async move {
+            if let Err(e) = dot.run(port, cert.as_deref(), key.as_deref()).await {
+                tracing::error!("DoT server error: {e}");
+            }
+        });
     }
 
     // Optional DHCP server

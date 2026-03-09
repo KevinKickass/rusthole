@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use parking_lot::RwLock;
@@ -58,12 +58,20 @@ impl GroupPolicyEngine {
         let domain_lower = domain.to_lowercase();
 
         // Extra allow takes priority within group
-        if group.extra_allow.iter().any(|d| d.to_lowercase() == domain_lower) {
+        if group
+            .extra_allow
+            .iter()
+            .any(|d| d.to_lowercase() == domain_lower)
+        {
             return Some(false);
         }
 
         // Extra block domains
-        if group.extra_block.iter().any(|d| d.to_lowercase() == domain_lower) {
+        if group
+            .extra_block
+            .iter()
+            .any(|d| d.to_lowercase() == domain_lower)
+        {
             return Some(true);
         }
 
@@ -74,6 +82,7 @@ impl GroupPolicyEngine {
 
     /// Get the blocklist names that should apply to a specific client.
     /// Returns None if no group policy, Some(list) if client has a group.
+    #[allow(dead_code)]
     pub fn get_client_blocklists(&self, client_ip: &str) -> Option<Vec<String>> {
         let client_map = self.client_map.read();
         let group_name = client_map.get(&client_ip.to_lowercase())?;
@@ -115,7 +124,9 @@ impl GroupPolicyEngine {
         let mut groups = self.groups.write();
         if let Some(group) = groups.get_mut(group_name) {
             group.clients.push(client.to_string());
-            self.client_map.write().insert(client.to_lowercase(), group_name.to_string());
+            self.client_map
+                .write()
+                .insert(client.to_lowercase(), group_name.to_string());
             true
         } else {
             false

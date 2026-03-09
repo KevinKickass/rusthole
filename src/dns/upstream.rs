@@ -41,7 +41,10 @@ impl DohUpstream {
         match self.try_resolve(primary_idx, query_bytes).await {
             Ok(bytes) => Ok(bytes),
             Err(e) => {
-                tracing::warn!("Primary upstream {} failed: {e}, trying failover", self.upstreams[primary_idx].url);
+                tracing::warn!(
+                    "Primary upstream {} failed: {e}, trying failover",
+                    self.upstreams[primary_idx].url
+                );
                 // Try all other upstreams
                 for idx in 0..self.upstreams.len() {
                     if idx == primary_idx {
@@ -50,7 +53,10 @@ impl DohUpstream {
                     match self.try_resolve(idx, query_bytes).await {
                         Ok(bytes) => return Ok(bytes),
                         Err(e) => {
-                            tracing::warn!("Failover upstream {} failed: {e}", self.upstreams[idx].url);
+                            tracing::warn!(
+                                "Failover upstream {} failed: {e}",
+                                self.upstreams[idx].url
+                            );
                         }
                     }
                 }
@@ -81,12 +87,14 @@ impl DohUpstream {
         &self.upstreams[idx].url
     }
 
+    #[allow(dead_code)]
     pub fn health_monitor(&self) -> &Arc<UpstreamHealthMonitor> {
         &self.health
     }
 
     async fn resolve_doh(&self, url: &str, query_bytes: &[u8]) -> Result<Vec<u8>> {
-        let resp = self.client
+        let resp = self
+            .client
             .post(url)
             .header("content-type", "application/dns-message")
             .header("accept", "application/dns-message")
@@ -110,7 +118,8 @@ impl DohUpstream {
         let (len, _) = tokio::time::timeout(
             std::time::Duration::from_secs(5),
             socket.recv_from(&mut buf),
-        ).await??;
+        )
+        .await??;
         buf.truncate(len);
         Ok(buf)
     }

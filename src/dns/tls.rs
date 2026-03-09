@@ -4,7 +4,10 @@ use tokio_rustls::rustls::ServerConfig;
 use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer};
 
 /// Load TLS config from cert/key files, or generate a self-signed cert.
-pub fn load_tls_config(cert_path: Option<&str>, key_path: Option<&str>) -> Result<Arc<ServerConfig>> {
+pub fn load_tls_config(
+    cert_path: Option<&str>,
+    key_path: Option<&str>,
+) -> Result<Arc<ServerConfig>> {
     let (certs, key) = match (cert_path, key_path) {
         (Some(cert_p), Some(key_p)) => {
             let cert_data = std::fs::read(cert_p)?;

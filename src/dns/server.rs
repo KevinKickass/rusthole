@@ -34,7 +34,14 @@ impl DnsServer {
         groups: Arc<GroupPolicyEngine>,
         schedules: Arc<ScheduleEngine>,
     ) -> Self {
-        Self { blocklist, upstream, db, rewrites, groups, schedules }
+        Self {
+            blocklist,
+            upstream,
+            db,
+            rewrites,
+            groups,
+            schedules,
+        }
     }
 
     pub async fn run(&self, listen_addr: &str) -> Result<()> {
@@ -140,6 +147,7 @@ impl DnsServer {
 }
 
 /// Handle a DNS query — shared by plain DNS, DoH, and DoT servers.
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_query(
     data: &[u8],
     client: SocketAddr,
@@ -172,7 +180,15 @@ pub async fn handle_query(
         let domain_log = domain_clean.to_string();
         let qtype_log = qtype_str.clone();
         tokio::spawn(async move {
-            let _ = db.log_query(&client_ip2, &domain_log, &qtype_log, false, elapsed.as_micros() as i64, Some("rewrite"), false);
+            let _ = db.log_query(
+                &client_ip2,
+                &domain_log,
+                &qtype_log,
+                false,
+                elapsed.as_micros() as i64,
+                Some("rewrite"),
+                false,
+            );
         });
         tracing::debug!("REWRITE {domain_clean} ({qtype_str}) for {client}");
         return Ok(rewrite_bytes);
@@ -188,7 +204,15 @@ pub async fn handle_query(
             let domain_log = domain_clean.to_string();
             let qtype_log = qtype_str.clone();
             tokio::spawn(async move {
-                let _ = db.log_query(&client_ip2, &domain_log, &qtype_log, true, elapsed.as_micros() as i64, None, false);
+                let _ = db.log_query(
+                    &client_ip2,
+                    &domain_log,
+                    &qtype_log,
+                    true,
+                    elapsed.as_micros() as i64,
+                    None,
+                    false,
+                );
             });
             tracing::debug!("GROUP BLOCKED {domain_clean} ({qtype_str}) from {client}");
             return Ok(response_bytes);
@@ -207,7 +231,15 @@ pub async fn handle_query(
         let domain_log = domain_clean.to_string();
         let qtype_log = qtype_str.clone();
         tokio::spawn(async move {
-            let _ = db.log_query(&client_ip2, &domain_log, &qtype_log, true, elapsed.as_micros() as i64, None, false);
+            let _ = db.log_query(
+                &client_ip2,
+                &domain_log,
+                &qtype_log,
+                true,
+                elapsed.as_micros() as i64,
+                None,
+                false,
+            );
         });
         tracing::debug!("SCHEDULE BLOCKED {domain_clean} ({qtype_str}) from {client}");
         return Ok(response_bytes);
@@ -215,7 +247,7 @@ pub async fn handle_query(
 
     // 4. Check blocklist
     let blocked = blocklist.is_blocked(domain_clean).await;
-    let mut cname_cloaked = false;
+    let cname_cloaked = false;
 
     let response_bytes = if blocked {
         build_blocked_response(&request, question.name(), qtype)?
@@ -229,17 +261,28 @@ pub async fn handle_query(
                             let cname_str = cname.0.to_string();
                             let cname_clean = cname_str.trim_end_matches('.');
                             if blocklist.is_cname_cloaked(domain_clean, cname_clean).await {
-                                cname_cloaked = true;
-                                let blocked_resp = build_blocked_response(&request, question.name(), qtype)?;
+                                let _ = cname_cloaked;
+                                let blocked_resp =
+                                    build_blocked_response(&request, question.name(), qtype)?;
                                 let elapsed = start.elapsed();
                                 let db2 = db.clone();
                                 let client_ip2 = client_ip.clone();
                                 let domain_log = domain_clean.to_string();
                                 let qtype_log = qtype_str.clone();
                                 tokio::spawn(async move {
-                                    let _ = db2.log_query(&client_ip2, &domain_log, &qtype_log, true, elapsed.as_micros() as i64, None, true);
+                                    let _ = db2.log_query(
+                                        &client_ip2,
+                                        &domain_log,
+                                        &qtype_log,
+                                        true,
+                                        elapsed.as_micros() as i64,
+                                        None,
+                                        true,
+                                    );
                                 });
-                                tracing::debug!("CNAME CLOAKED {domain_clean} -> {cname_clean} from {client}");
+                                tracing::debug!(
+                                    "CNAME CLOAKED {domain_clean} -> {cname_clean} from {client}"
+                                );
                                 return Ok(blocked_resp);
                             }
                         }
@@ -255,7 +298,11 @@ pub async fn handle_query(
     };
 
     let elapsed = start.elapsed();
-    let upstream_name: Option<String> = if blocked { None } else { Some(upstream.upstream_name().to_string()) };
+    let upstream_name: Option<String> = if blocked {
+        None
+    } else {
+        Some(upstream.upstream_name().to_string())
+    };
 
     let db = db.clone();
     let domain_log = domain_clean.to_string();
@@ -281,7 +328,11 @@ pub async fn handle_query(
     Ok(response_bytes)
 }
 
-pub fn build_blocked_response(request: &Message, name: &Name, qtype: RecordType) -> Result<Vec<u8>> {
+pub fn build_blocked_response(
+    request: &Message,
+    name: &Name,
+    qtype: RecordType,
+) -> Result<Vec<u8>> {
     let mut response = Message::new();
     let mut header = Header::response_from_request(request.header());
     header.set_message_type(MessageType::Response);

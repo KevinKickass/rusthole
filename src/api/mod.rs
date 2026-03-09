@@ -4,8 +4,7 @@ use axum::{
     Json, Router,
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
-    routing::{delete, get, post, put},
-    middleware::{self, Next},
+    routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 
@@ -14,7 +13,7 @@ use crate::config::BlocklistSource;
 use crate::db::Database;
 use crate::dhcp::DhcpServer;
 use crate::dns_rewrite::{DnsRewriteEngine, RewriteRule};
-use crate::group_policy::{GroupPolicyEngine, GroupInfo};
+use crate::group_policy::{GroupInfo, GroupPolicyEngine};
 use crate::schedule::{ScheduleEngine, ScheduleInfo};
 use crate::upstream_health::UpstreamHealthMonitor;
 
@@ -32,7 +31,7 @@ pub struct AppState {
 }
 
 pub fn router(state: AppState) -> Router {
-    let api = Router::new()
+    Router::new()
         // Stats & queries
         .route("/api/stats", get(get_stats))
         .route("/api/queries", get(get_queries))
@@ -82,9 +81,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/blocking/status", get(get_blocking_status))
         .route("/api/blocking/enable", post(enable_blocking))
         .route("/api/blocking/disable", post(disable_blocking))
-        .with_state(state);
-
-    api
+        .with_state(state)
 }
 
 /// Check API token if configured. Returns Err(401) if token is required but missing/wrong.
@@ -110,7 +107,10 @@ async fn get_stats(
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     check_auth(&state, &headers)?;
-    let stats = state.db.get_stats().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let stats = state
+        .db
+        .get_stats()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(serde_json::to_value(stats).unwrap()))
 }
 
@@ -123,7 +123,9 @@ struct QueryParams {
     blocked: Option<bool>,
 }
 
-fn default_limit() -> u32 { 100 }
+fn default_limit() -> u32 {
+    100
+}
 
 async fn get_queries(
     State(state): State<AppState>,
@@ -131,7 +133,9 @@ async fn get_queries(
     Query(params): Query<QueryParams>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     check_auth(&state, &headers)?;
-    let queries = state.db.get_queries(params.limit, params.offset, params.blocked)
+    let queries = state
+        .db
+        .get_queries(params.limit, params.offset, params.blocked)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(serde_json::to_value(queries).unwrap()))
 }
@@ -156,14 +160,17 @@ async fn search_queries(
     Query(params): Query<SearchParams>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     check_auth(&state, &headers)?;
-    let queries = state.db.search_queries(
-        params.query.as_deref(),
-        params.client.as_deref(),
-        params.query_type.as_deref(),
-        params.blocked,
-        params.limit,
-        params.offset,
-    ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let queries = state
+        .db
+        .search_queries(
+            params.query.as_deref(),
+            params.client.as_deref(),
+            params.query_type.as_deref(),
+            params.blocked,
+            params.limit,
+            params.offset,
+        )
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(serde_json::to_value(queries).unwrap()))
 }
 
@@ -172,7 +179,10 @@ async fn get_clients(
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     check_auth(&state, &headers)?;
-    let clients = state.db.get_all_clients().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let clients = state
+        .db
+        .get_all_clients()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(serde_json::to_value(clients).unwrap()))
 }
 
@@ -182,7 +192,10 @@ async fn get_client_stats(
     axum::extract::Path(ip): axum::extract::Path<String>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     check_auth(&state, &headers)?;
-    let stats = state.db.get_client_stats(&ip).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let stats = state
+        .db
+        .get_client_stats(&ip)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(serde_json::to_value(stats).unwrap()))
 }
 
@@ -208,11 +221,14 @@ async fn add_source(
     Json(body): Json<NewSource>,
 ) -> Result<StatusCode, StatusCode> {
     check_auth(&state, &headers)?;
-    state.blocklist.add_source(BlocklistSource {
-        name: body.name,
-        url: body.url,
-        enabled: true,
-    }).await;
+    state
+        .blocklist
+        .add_source(BlocklistSource {
+            name: body.name,
+            url: body.url,
+            enabled: true,
+        })
+        .await;
     Ok(StatusCode::CREATED)
 }
 
@@ -246,7 +262,11 @@ async fn toggle_source(
     Json(body): Json<ToggleSource>,
 ) -> Result<StatusCode, StatusCode> {
     check_auth(&state, &headers)?;
-    if state.blocklist.toggle_source(&body.name, body.enabled).await {
+    if state
+        .blocklist
+        .toggle_source(&body.name, body.enabled)
+        .await
+    {
         Ok(StatusCode::OK)
     } else {
         Ok(StatusCode::NOT_FOUND)
@@ -258,7 +278,11 @@ async fn refresh_blocklists(
     headers: HeaderMap,
 ) -> Result<Json<CountResponse>, StatusCode> {
     check_auth(&state, &headers)?;
-    let count = state.blocklist.refresh().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let count = state
+        .blocklist
+        .refresh()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(CountResponse { count }))
 }
 
@@ -272,7 +296,9 @@ async fn get_blocklist_count(
     headers: HeaderMap,
 ) -> Result<Json<CountResponse>, StatusCode> {
     check_auth(&state, &headers)?;
-    Ok(Json(CountResponse { count: state.blocklist.domain_count() }))
+    Ok(Json(CountResponse {
+        count: state.blocklist.domain_count(),
+    }))
 }
 
 #[derive(Deserialize)]
@@ -371,7 +397,10 @@ async fn add_regex_filter(
     Json(body): Json<PatternBody>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     check_auth(&state, &headers).map_err(|s| (s, "Unauthorized".into()))?;
-    state.blocklist.add_regex_filter(&body.pattern).await
+    state
+        .blocklist
+        .add_regex_filter(&body.pattern)
+        .await
         .map(|_| StatusCode::OK)
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid regex: {e}")))
 }
@@ -491,7 +520,10 @@ async fn remove_client_from_group(
     Json(body): Json<ClientGroup>,
 ) -> Result<StatusCode, StatusCode> {
     check_auth(&state, &headers)?;
-    if state.groups.remove_client_from_group(&body.client, &body.group) {
+    if state
+        .groups
+        .remove_client_from_group(&body.client, &body.group)
+    {
         Ok(StatusCode::OK)
     } else {
         Ok(StatusCode::NOT_FOUND)
@@ -621,7 +653,9 @@ async fn get_blocking_status(
 ) -> Result<Json<BlockingStatus>, StatusCode> {
     check_auth(&state, &headers)?;
     Ok(Json(BlockingStatus {
-        enabled: state.blocking_enabled.load(std::sync::atomic::Ordering::Relaxed),
+        enabled: state
+            .blocking_enabled
+            .load(std::sync::atomic::Ordering::Relaxed),
         blocked_domains: state.blocklist.domain_count(),
     }))
 }
@@ -631,7 +665,9 @@ async fn enable_blocking(
     headers: HeaderMap,
 ) -> Result<Json<BlockingStatus>, StatusCode> {
     check_auth(&state, &headers)?;
-    state.blocking_enabled.store(true, std::sync::atomic::Ordering::Relaxed);
+    state
+        .blocking_enabled
+        .store(true, std::sync::atomic::Ordering::Relaxed);
     Ok(Json(BlockingStatus {
         enabled: true,
         blocked_domains: state.blocklist.domain_count(),
@@ -643,7 +679,9 @@ async fn disable_blocking(
     headers: HeaderMap,
 ) -> Result<Json<BlockingStatus>, StatusCode> {
     check_auth(&state, &headers)?;
-    state.blocking_enabled.store(false, std::sync::atomic::Ordering::Relaxed);
+    state
+        .blocking_enabled
+        .store(false, std::sync::atomic::Ordering::Relaxed);
     Ok(Json(BlockingStatus {
         enabled: false,
         blocked_domains: state.blocklist.domain_count(),

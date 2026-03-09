@@ -48,7 +48,14 @@ impl DohServer {
         groups: Arc<GroupPolicyEngine>,
         schedules: Arc<ScheduleEngine>,
     ) -> Self {
-        Self { blocklist, upstream, db, rewrites, groups, schedules }
+        Self {
+            blocklist,
+            upstream,
+            db,
+            rewrites,
+            groups,
+            schedules,
+        }
     }
 
     pub async fn run(
@@ -89,10 +96,11 @@ impl DohServer {
                         let io = hyper_util::rt::TokioIo::new(tls_stream);
                         let service = hyper_util::service::TowerToHyperService::new(app);
                         if let Err(e) = hyper_util::server::conn::auto::Builder::new(
-                            hyper_util::rt::TokioExecutor::new()
+                            hyper_util::rt::TokioExecutor::new(),
                         )
                         .serve_connection(io, service)
-                        .await {
+                        .await
+                        {
                             tracing::debug!("DoH connection error from {peer}: {e}");
                         }
                     }
@@ -115,7 +123,9 @@ async fn doh_get(
     headers: HeaderMap,
     Query(params): Query<DohGetParams>,
 ) -> Result<(StatusCode, HeaderMap, Vec<u8>), StatusCode> {
-    let query_bytes = URL_SAFE_NO_PAD.decode(&params.dns).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let query_bytes = URL_SAFE_NO_PAD
+        .decode(&params.dns)
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
     process_doh(state, &query_bytes, &headers).await
 }
 
@@ -143,7 +153,9 @@ async fn process_doh(
         &state.rewrites,
         &state.groups,
         &state.schedules,
-    ).await.map_err(|_| StatusCode::BAD_REQUEST)?;
+    )
+    .await
+    .map_err(|_| StatusCode::BAD_REQUEST)?;
 
     let mut resp_headers = HeaderMap::new();
     resp_headers.insert("content-type", "application/dns-message".parse().unwrap());

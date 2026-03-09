@@ -25,6 +25,7 @@ struct UpstreamState {
     consecutive_failures: u32,
     total_queries: u64,
     total_failures: u64,
+    #[allow(dead_code)]
     kind: crate::config::UpstreamKind,
 }
 
@@ -97,7 +98,11 @@ impl UpstreamHealthMonitor {
             // Mark unhealthy after 3 consecutive failures
             if state.consecutive_failures >= 3 {
                 state.healthy = false;
-                tracing::warn!("Upstream {} marked unhealthy after {} failures", state.url, state.consecutive_failures);
+                tracing::warn!(
+                    "Upstream {} marked unhealthy after {} failures",
+                    state.url,
+                    state.consecutive_failures
+                );
             }
         }
     }
@@ -141,17 +146,15 @@ impl UpstreamHealthMonitor {
             for (idx, upstream) in upstreams.iter().enumerate() {
                 let start = Instant::now();
                 let result = match upstream.kind {
-                    crate::config::UpstreamKind::Doh => {
-                        client
-                            .post(&upstream.url)
-                            .header("content-type", "application/dns-message")
-                            .header("accept", "application/dns-message")
-                            .body(probe_query.clone())
-                            .send()
-                            .await
-                            .map(|_| ())
-                            .map_err(|e| e.to_string())
-                    }
+                    crate::config::UpstreamKind::Doh => client
+                        .post(&upstream.url)
+                        .header("content-type", "application/dns-message")
+                        .header("accept", "application/dns-message")
+                        .body(probe_query.clone())
+                        .send()
+                        .await
+                        .map(|_| ())
+                        .map_err(|e| e.to_string()),
                     crate::config::UpstreamKind::Udp => {
                         match tokio::net::UdpSocket::bind("0.0.0.0:0").await {
                             Ok(socket) => {

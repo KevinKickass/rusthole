@@ -43,13 +43,17 @@ impl DhcpServer {
         // Pre-populate static leases
         for sl in &config.static_leases {
             if let (Some(mac), Some(ip)) = (parse_mac(&sl.mac), sl.ip.parse::<Ipv4Addr>().ok()) {
-                leases.lock().insert(mac, Lease {
+                leases.lock().insert(
                     mac,
-                    ip,
-                    hostname: sl.hostname.clone(),
-                    expires: std::time::Instant::now() + std::time::Duration::from_secs(u64::MAX / 2),
-                    is_static: true,
-                });
+                    Lease {
+                        mac,
+                        ip,
+                        hostname: sl.hostname.clone(),
+                        expires: std::time::Instant::now()
+                            + std::time::Duration::from_secs(u64::MAX / 2),
+                        is_static: true,
+                    },
+                );
             }
         }
 
@@ -66,7 +70,11 @@ impl DhcpServer {
                 mac: format_mac(&l.mac),
                 ip: l.ip.to_string(),
                 hostname: l.hostname.clone(),
-                expires_in_secs: if l.is_static { u64::MAX } else { l.expires.duration_since(now).as_secs() },
+                expires_in_secs: if l.is_static {
+                    u64::MAX
+                } else {
+                    l.expires.duration_since(now).as_secs()
+                },
                 is_static: l.is_static,
             })
             .collect()
@@ -74,13 +82,17 @@ impl DhcpServer {
 
     pub fn add_static_lease(&self, mac_str: &str, ip_str: &str, hostname: Option<String>) -> bool {
         if let (Some(mac), Ok(ip)) = (parse_mac(mac_str), ip_str.parse::<Ipv4Addr>()) {
-            self.leases.lock().insert(mac, Lease {
+            self.leases.lock().insert(
                 mac,
-                ip,
-                hostname,
-                expires: std::time::Instant::now() + std::time::Duration::from_secs(u64::MAX / 2),
-                is_static: true,
-            });
+                Lease {
+                    mac,
+                    ip,
+                    hostname,
+                    expires: std::time::Instant::now()
+                        + std::time::Duration::from_secs(u64::MAX / 2),
+                    is_static: true,
+                },
+            );
             true
         } else {
             false
@@ -90,11 +102,11 @@ impl DhcpServer {
     pub fn remove_static_lease(&self, mac_str: &str) -> bool {
         if let Some(mac) = parse_mac(mac_str) {
             let mut leases = self.leases.lock();
-            if let Some(l) = leases.get(&mac) {
-                if l.is_static {
-                    leases.remove(&mac);
-                    return true;
-                }
+            if let Some(l) = leases.get(&mac)
+                && l.is_static
+            {
+                leases.remove(&mac);
+                return true;
             }
         }
         false
@@ -125,7 +137,9 @@ impl DhcpServer {
     }
 
     fn handle_dhcp_packet(&self, data: &[u8]) -> Option<Vec<u8>> {
-        if data[0] != 1 { return None; }
+        if data[0] != 1 {
+            return None;
+        }
 
         let mut mac = [0u8; 6];
         mac.copy_from_slice(&data[28..34]);
@@ -134,7 +148,8 @@ impl DhcpServer {
         let msg_type = *msg_type.first()?;
 
         // Extract hostname from option 12 if present
-        let hostname = self.find_option(data, 12)
+        let hostname = self
+            .find_option(data, 12)
             .and_then(|h| String::from_utf8(h.to_vec()).ok());
 
         match msg_type {
@@ -152,7 +167,9 @@ impl DhcpServer {
                     if let Some(lease) = leases.get_mut(&mac) {
                         if !lease.is_static {
                             lease.expires = std::time::Instant::now()
-                                + std::time::Duration::from_secs(self.config.lease_time_secs as u64);
+                                + std::time::Duration::from_secs(
+                                    self.config.lease_time_secs as u64,
+                                );
                         }
                         if hostname.is_some() {
                             lease.hostname = hostname;
@@ -168,14 +185,23 @@ impl DhcpServer {
     fn find_option<'a>(&self, data: &'a [u8], option: u8) -> Option<&'a [u8]> {
         let mut i = 240;
         while i < data.len() {
-            if data[i] == 255 { break; }
-            if data[i] == 0 { i += 1; continue; }
-            if i + 1 >= data.len() { break; }
+            if data[i] == 255 {
+                break;
+            }
+            if data[i] == 0 {
+                i += 1;
+                continue;
+            }
+            if i + 1 >= data.len() {
+                break;
+            }
             let opt = data[i];
             let len = data[i + 1] as usize;
-            if i + 2 + len > data.len() { break; }
+            if i + 2 + len > data.len() {
+                break;
+            }
             if opt == option {
-                return Some(&data[i+2..i+2+len]);
+                return Some(&data[i + 2..i + 2 + len]);
             }
             i += 2 + len;
         }
@@ -185,10 +211,10 @@ impl DhcpServer {
     fn allocate_ip(&self, mac: &[u8; 6], hostname: Option<String>) -> Option<Ipv4Addr> {
         let mut leases = self.leases.lock();
 
-        if let Some(lease) = leases.get(mac) {
-            if lease.is_static || lease.expires > std::time::Instant::now() {
-                return Some(lease.ip);
-            }
+        if let Some(lease) = leases.get(mac)
+            && (lease.is_static || lease.expires > std::time::Instant::now())
+        {
+            return Some(lease.ip);
         }
 
         let start: Ipv4Addr = self.config.range_start.parse().ok()?;
@@ -204,20 +230,30 @@ impl DhcpServer {
         for ip_u32 in start_u32..=end_u32 {
             let ip = Ipv4Addr::from(ip_u32);
             if !used.contains(&ip) {
-                leases.insert(*mac, Lease {
-                    mac: *mac,
-                    ip,
-                    hostname,
-                    expires: now + std::time::Duration::from_secs(self.config.lease_time_secs as u64),
-                    is_static: false,
-                });
+                leases.insert(
+                    *mac,
+                    Lease {
+                        mac: *mac,
+                        ip,
+                        hostname,
+                        expires: now
+                            + std::time::Duration::from_secs(self.config.lease_time_secs as u64),
+                        is_static: false,
+                    },
+                );
                 return Some(ip);
             }
         }
         None
     }
 
-    fn build_response(&self, request: &[u8], mac: &[u8; 6], offer_ip: Ipv4Addr, msg_type: u8) -> Vec<u8> {
+    fn build_response(
+        &self,
+        request: &[u8],
+        mac: &[u8; 6],
+        offer_ip: Ipv4Addr,
+        msg_type: u8,
+    ) -> Vec<u8> {
         let mut resp = vec![0u8; 576];
         resp[0] = 2;
         resp[1] = request[1];
@@ -232,18 +268,32 @@ impl DhcpServer {
         resp[236..240].copy_from_slice(&[99, 130, 83, 99]);
 
         let mut i = 240;
-        resp[i] = 53; resp[i+1] = 1; resp[i+2] = msg_type; i += 3;
+        resp[i] = 53;
+        resp[i + 1] = 1;
+        resp[i + 2] = msg_type;
+        i += 3;
         if let Ok(mask) = self.config.subnet_mask.parse::<Ipv4Addr>() {
-            resp[i] = 1; resp[i+1] = 4; resp[i+2..i+6].copy_from_slice(&mask.octets()); i += 6;
+            resp[i] = 1;
+            resp[i + 1] = 4;
+            resp[i + 2..i + 6].copy_from_slice(&mask.octets());
+            i += 6;
         }
         if let Ok(gw) = self.config.gateway.parse::<Ipv4Addr>() {
-            resp[i] = 3; resp[i+1] = 4; resp[i+2..i+6].copy_from_slice(&gw.octets()); i += 6;
+            resp[i] = 3;
+            resp[i + 1] = 4;
+            resp[i + 2..i + 6].copy_from_slice(&gw.octets());
+            i += 6;
         }
         if let Ok(dns) = self.config.dns_server.parse::<Ipv4Addr>() {
-            resp[i] = 6; resp[i+1] = 4; resp[i+2..i+6].copy_from_slice(&dns.octets()); i += 6;
+            resp[i] = 6;
+            resp[i + 1] = 4;
+            resp[i + 2..i + 6].copy_from_slice(&dns.octets());
+            i += 6;
         }
-        resp[i] = 51; resp[i+1] = 4;
-        resp[i+2..i+6].copy_from_slice(&self.config.lease_time_secs.to_be_bytes()); i += 6;
+        resp[i] = 51;
+        resp[i + 1] = 4;
+        resp[i + 2..i + 6].copy_from_slice(&self.config.lease_time_secs.to_be_bytes());
+        i += 6;
         resp[i] = 255;
 
         resp
@@ -252,7 +302,9 @@ impl DhcpServer {
 
 fn parse_mac(s: &str) -> Option<[u8; 6]> {
     let parts: Vec<&str> = s.split(':').collect();
-    if parts.len() != 6 { return None; }
+    if parts.len() != 6 {
+        return None;
+    }
     let mut mac = [0u8; 6];
     for (i, part) in parts.iter().enumerate() {
         mac[i] = u8::from_str_radix(part, 16).ok()?;
@@ -261,6 +313,8 @@ fn parse_mac(s: &str) -> Option<[u8; 6]> {
 }
 
 fn format_mac(mac: &[u8; 6]) -> String {
-    format!("{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5])
+    format!(
+        "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
+    )
 }

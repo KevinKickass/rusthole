@@ -30,7 +30,14 @@ impl DotServer {
         groups: Arc<GroupPolicyEngine>,
         schedules: Arc<ScheduleEngine>,
     ) -> Self {
-        Self { blocklist, upstream, db, rewrites, groups, schedules }
+        Self {
+            blocklist,
+            upstream,
+            db,
+            rewrites,
+            groups,
+            schedules,
+        }
     }
 
     pub async fn run(
@@ -58,38 +65,36 @@ impl DotServer {
 
             tokio::spawn(async move {
                 match acceptor.accept(stream).await {
-                    Ok(mut tls_stream) => {
-                        loop {
-                            let mut len_buf = [0u8; 2];
-                            if tls_stream.read_exact(&mut len_buf).await.is_err() {
-                                break;
-                            }
-                            let msg_len = u16::from_be_bytes(len_buf) as usize;
-                            if msg_len == 0 || msg_len > 65535 {
-                                break;
-                            }
-                            let mut data = vec![0u8; msg_len];
-                            if tls_stream.read_exact(&mut data).await.is_err() {
-                                break;
-                            }
+                    Ok(mut tls_stream) => loop {
+                        let mut len_buf = [0u8; 2];
+                        if tls_stream.read_exact(&mut len_buf).await.is_err() {
+                            break;
+                        }
+                        let msg_len = u16::from_be_bytes(len_buf) as usize;
+                        if msg_len == 0 || msg_len > 65535 {
+                            break;
+                        }
+                        let mut data = vec![0u8; msg_len];
+                        if tls_stream.read_exact(&mut data).await.is_err() {
+                            break;
+                        }
 
-                            match super::handle_query(&data, peer, &bl, &up, &db, &rw, &gp, &sc).await {
-                                Ok(response) => {
-                                    let len = (response.len() as u16).to_be_bytes();
-                                    if tls_stream.write_all(&len).await.is_err() {
-                                        break;
-                                    }
-                                    if tls_stream.write_all(&response).await.is_err() {
-                                        break;
-                                    }
+                        match super::handle_query(&data, peer, &bl, &up, &db, &rw, &gp, &sc).await {
+                            Ok(response) => {
+                                let len = (response.len() as u16).to_be_bytes();
+                                if tls_stream.write_all(&len).await.is_err() {
+                                    break;
                                 }
-                                Err(e) => {
-                                    tracing::debug!("DoT query error from {peer}: {e}");
+                                if tls_stream.write_all(&response).await.is_err() {
                                     break;
                                 }
                             }
+                            Err(e) => {
+                                tracing::debug!("DoT query error from {peer}: {e}");
+                                break;
+                            }
                         }
-                    }
+                    },
                     Err(e) => {
                         tracing::debug!("DoT TLS handshake error from {peer}: {e}");
                     }

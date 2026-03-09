@@ -39,7 +39,11 @@ impl BlocklistEngine {
         for d in &config.custom_allow {
             whitelist.insert(d.to_lowercase());
         }
-        let wildcards: Vec<String> = config.wildcard_block.iter().map(|w| w.to_lowercase()).collect();
+        let wildcards: Vec<String> = config
+            .wildcard_block
+            .iter()
+            .map(|w| w.to_lowercase())
+            .collect();
 
         let mut compiled_regex = Vec::new();
         for pattern in &config.regex_filters {
@@ -105,10 +109,15 @@ impl BlocklistEngine {
     /// Check if a CNAME target domain is blocked (for CNAME cloaking detection)
     pub async fn is_cname_cloaked(&self, original_domain: &str, cname_target: &str) -> bool {
         let original = original_domain.to_lowercase();
-        let target = cname_target.to_lowercase().trim_end_matches('.').to_string();
+        let target = cname_target
+            .to_lowercase()
+            .trim_end_matches('.')
+            .to_string();
 
         // If the original domain is whitelisted, don't flag CNAME cloaking
-        if self.whitelist.contains(original.as_str()) || self.allowed_domains.contains(original.as_str()) {
+        if self.whitelist.contains(original.as_str())
+            || self.allowed_domains.contains(original.as_str())
+        {
             return false;
         }
 
@@ -182,7 +191,10 @@ impl BlocklistEngine {
             if line.starts_with("0.0.0.0") || line.starts_with("127.0.0.1") {
                 if let Some(domain) = line.split_whitespace().nth(1) {
                     let domain = domain.to_lowercase();
-                    if domain != "localhost" && domain != "localhost.localdomain" && !domain.is_empty() {
+                    if domain != "localhost"
+                        && domain != "localhost.localdomain"
+                        && !domain.is_empty()
+                    {
                         self.blocked_domains.insert(domain);
                         count += 1;
                     }
@@ -192,7 +204,7 @@ impl BlocklistEngine {
 
             // AdGuard/ABP format: ||domain^
             if line.starts_with("||") && line.ends_with('^') {
-                let domain = &line[2..line.len()-1];
+                let domain = &line[2..line.len() - 1];
                 if !domain.is_empty() && !domain.contains('/') {
                     self.blocked_domains.insert(domain.to_lowercase());
                     count += 1;
@@ -260,7 +272,12 @@ impl BlocklistEngine {
     }
 
     pub async fn get_regex_filters(&self) -> Vec<String> {
-        self.regex_filters.read().await.iter().map(|cr| cr.pattern.clone()).collect()
+        self.regex_filters
+            .read()
+            .await
+            .iter()
+            .map(|cr| cr.pattern.clone())
+            .collect()
     }
 
     pub async fn get_sources(&self) -> Vec<BlocklistSource> {
