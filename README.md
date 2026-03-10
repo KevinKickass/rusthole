@@ -22,7 +22,7 @@ Lightweight DNS sinkhole / Pi-hole alternative written in Rust.
 One-liner for Linux (x86_64, ARM64/Raspberry Pi) and macOS:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/KevinKickass/rusthole/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/KevinKickass/rusthole/master/install.sh | sudo bash
 ```
 
 This downloads the latest release, installs the binary, creates a systemd service, and sets up a default config. Dashboard at `http://<your-ip>:8080`.
@@ -34,7 +34,7 @@ sudo systemctl enable --now rusthole
 To uninstall:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/KevinKickass/rusthole/main/uninstall.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/KevinKickass/rusthole/master/uninstall.sh | sudo bash
 ```
 
 ### Raspberry Pi
