@@ -17,11 +17,35 @@ Lightweight DNS sinkhole / Pi-hole alternative written in Rust.
 - **DHCP** — Optional DHCP server
 - **Performance** — Async per-query handling, DashMap for lock-free blocklist lookups
 
-## Quick Start
+## Install
+
+One-liner for Linux (x86_64, ARM64/Raspberry Pi) and macOS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/KevinKickass/rusthole/main/install.sh | sudo bash
+```
+
+This downloads the latest release, installs the binary, creates a systemd service, and sets up a default config. Dashboard at `http://<your-ip>:8080`.
+
+```bash
+sudo systemctl enable --now rusthole
+```
+
+To uninstall:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/KevinKickass/rusthole/main/uninstall.sh | sudo bash
+```
+
+### Raspberry Pi
+
+The installer auto-detects ARM64. After installing, point your router's DNS server to your Pi's IP address and every device on your network is protected.
+
+### Build from source
 
 ```bash
 cargo build --release
-sudo ./target/release/rusthole          # needs root for port 53
+sudo ./target/release/rusthole
 ```
 
 Config is auto-created as `rusthole.toml`. Dashboard at `http://localhost:8080`.
